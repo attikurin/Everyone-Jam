@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>みんなのジャム - みんなのホワイトボード</title>
+<meta name="description" content="Google Jamboardの使いやすさを再現した、小学校の先生のためのシンプルなホワイトボードアプリ。オフラインでも動作するPWA対応。" />
+
+<!-- ===== PWA: マニフェスト ===== -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#ff9a8b" />
+<meta name="application-name" content="みんなのジャム" />
+
+<!-- ===== iOS Safari 用 ===== -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="みんなのジャム" />
+<meta name="format-detection" content="telephone=no" />
+
+<!-- ===== Microsoft タイル ===== -->
+<meta name="msapplication-TileColor" content="#ff9a8b" />
+<meta name="msapplication-TileImage" content="icons/icon-192.png" />
+
+<!-- ===== ファビコン ===== -->
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
+<link rel="shortcut icon" href="icons/icon-192.png" />
+
+<!-- TailwindCSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Konva.js -->
+<script src="https://cdn.jsdelivr.net/npm/konva@9.3.16/konva.min.js"></script>
+<!-- jsPDF -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<!-- PeerJS（WebRTC P2P 共同編集） -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<!-- QRコード生成 -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<!-- PDF.js（PDFを画像として取り込む・v1.8.0 / Phase 8） -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<!-- Tesseract.js（手書き文字認識・v1.9.0 / Phase 9） -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="css/style.css?v=1.10.0" />
+</head>
+<body class="overflow-hidden select-none">
+
+<!-- ====== ヘッダー ====== -->
+<header id="app-header" class="flex items-center justify-between px-3 sm:px-4 h-14 bg-white border-b border-orange-100 shadow-sm relative z-30">
+  <!-- 左：ロゴ・タイトル -->
+  <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+    <div class="logo-badge flex-shrink-0">
+      <i class="fa-solid fa-palette"></i>
+    </div>
+    <div class="hidden sm:block flex-shrink-0">
+      <h1 class="text-base lg:text-lg font-extrabold text-gray-800 leading-none">みんなのジャム</h1>
+      <p class="text-[10px] text-gray-500 leading-none mt-0.5">シンプルなホワイトボード</p>
+    </div>
+    <input id="board-title" type="text" value="新しいボード" class="ml-1 sm:ml-4 px-2 sm:px-3 py-1.5 rounded-lg border border-transparent hover:border-orange-200 focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-100 text-sm font-semibold text-gray-700 w-32 sm:w-40 md:w-56 min-w-0 flex-shrink" />
+  </div>
+
+  <!-- 中央/右：ボタン群 -->
+  <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+    <!-- オフラインバッジ（オフライン時のみ表示） -->
+    <span id="offline-badge" title="オフラインで動作中（変更はローカルに保存されます）" style="display:none;">
+      <i class="fa-solid fa-plug-circle-xmark"></i><span class="hidden sm:inline">オフライン</span>
+    </span>
+
+    <!-- 参加者アバター（最大5名） -->
+    <div id="user-avatars" class="hidden lg:flex items-center -space-x-2 mr-1"></div>
+
+    <!-- 接続状態インジケータ -->
+    <button id="sync-indicator" class="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold transition" title="共同編集の状態">
+      <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-400"></span>
+      <span id="sync-label">接続中…</span>
+    </button>
+
+    <!-- ===== lg以上で表示する主要ボタン（タブレット縦持ち768px時もハンバーガー方式にする） ===== -->
+    <!-- 先生モード/生徒モード切替 -->
+    <button id="btn-teacher-mode" class="header-btn-mode hidden lg:inline-flex" title="モード切替">
+      <i class="fa-solid fa-user-graduate mr-1"></i><span class="mode-label">生徒</span>
+    </button>
+    <button id="btn-timer" class="header-btn hidden lg:inline-flex" title="タイマーを開く"><i class="fa-solid fa-stopwatch"></i></button>
+    <button id="btn-comment-mode" class="header-btn hidden lg:inline-flex" title="コメントを追加（ボード上をクリック）"><i class="fa-regular fa-comment-dots"></i></button>
+    <button id="btn-history" class="header-btn hidden lg:inline-flex" title="変更履歴を見る"><i class="fa-solid fa-clock-rotate-left"></i></button>
+
+    <!-- 招待ボタン：スマホでもアイコンのみ表示 -->
+    <button id="btn-share" class="header-btn-share" title="共同編集の招待リンクを表示">
+      <i class="fa-solid fa-user-plus sm:mr-1"></i><span class="hidden sm:inline">招待</span>
+    </button>
+
+    <button id="btn-new-board" class="header-btn hidden lg:inline-flex" title="新しいボードを作る"><i class="fa-solid fa-file-circle-plus"></i></button>
+    <button id="btn-board-list" class="header-btn hidden lg:inline-flex" title="最近のボードを開く"><i class="fa-solid fa-folder-open"></i></button>
+    <div class="w-px h-6 bg-orange-100 mx-1 hidden lg:block"></div>
+
+    <!-- Undo/Redo：スマホでも表示（最も使う） -->
+    <button id="btn-undo" class="header-btn" title="元に戻す (Ctrl+Z)"><i class="fa-solid fa-rotate-left"></i></button>
+    <button id="btn-redo" class="header-btn" title="やり直し (Ctrl+Y)"><i class="fa-solid fa-rotate-right"></i></button>
+
+    <div class="w-px h-6 bg-orange-100 mx-1 hidden lg:block"></div>
+    <button id="btn-clear" class="header-btn hidden lg:inline-flex" title="このページをクリア"><i class="fa-solid fa-broom"></i></button>
+
+    <!-- 保存：スマホでもアイコンのみ表示 -->
+    <button id="btn-export" class="header-btn-primary" title="保存・エクスポート">
+      <i class="fa-solid fa-download sm:mr-1.5"></i><span class="hidden sm:inline">保存</span>
+    </button>
+
+    <!-- PWAインストール（インストール可能な時だけJS側で表示） -->
+    <button id="btn-pwa-install" class="header-btn hidden lg:inline-flex" title="アプリとしてインストール" style="display:none;">
+      <i class="fa-solid fa-mobile-screen-button"></i>
+    </button>
+
+    <button id="btn-help" class="header-btn hidden lg:inline-flex" title="使い方"><i class="fa-solid fa-circle-question"></i></button>
+
+    <!-- ===== モバイル/タブレット用ハンバーガーメニュー（lg未満で表示） ===== -->
+    <button id="btn-mobile-menu" class="header-btn lg:hidden" title="メニュー" aria-label="メニュー">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ====== モバイル用ドロワーメニュー ====== -->
+<div id="mobile-drawer" class="hidden fixed inset-0 z-40">
+  <div id="mobile-drawer-backdrop" class="absolute inset-0 bg-black/40"></div>
+  <aside id="mobile-drawer-panel" class="absolute right-0 top-0 bottom-0 w-72 max-w-[85vw] bg-white shadow-2xl flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-orange-100">
+      <h3 class="font-bold text-gray-800"><i class="fa-solid fa-bars-staggered text-orange-400 mr-2"></i>メニュー</h3>
+      <button id="btn-mobile-close" class="header-btn" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-3 space-y-1">
+      <!-- 接続状態（モバイル用） -->
+      <div id="mobile-sync-status" class="text-xs text-gray-500 px-3 py-2 bg-orange-50 rounded-lg mb-2">
+        <span id="mobile-sync-dot" class="inline-block w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
+        <span id="mobile-sync-label">接続中…</span>
+      </div>
+
+      <!-- ボード操作 -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">ボード</div>
+      <button class="mobile-menu-item" data-action="new-board">
+        <i class="fa-solid fa-file-circle-plus text-orange-400"></i>新しいボードを作る
+      </button>
+      <button class="mobile-menu-item" data-action="board-list">
+        <i class="fa-solid fa-folder-open text-orange-400"></i>ボード一覧
+      </button>
+      <button class="mobile-menu-item" data-action="export">
+        <i class="fa-solid fa-download text-orange-400"></i>保存・エクスポート
+      </button>
+      <button class="mobile-menu-item" data-action="clear">
+        <i class="fa-solid fa-broom text-orange-400"></i>このページをクリア
+      </button>
+
+      <!-- 授業ツール -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">授業ツール</div>
+      <button class="mobile-menu-item" data-action="teacher-mode">
+        <i class="fa-solid fa-user-graduate text-orange-400"></i>
+        <span>モード切替（<span id="mobile-mode-label">生徒</span>）</span>
+      </button>
+      <button class="mobile-menu-item" data-action="timer">
+        <i class="fa-solid fa-stopwatch text-orange-400"></i>タイマー
+      </button>
+      <button class="mobile-menu-item" data-action="comment">
+        <i class="fa-regular fa-comment-dots text-orange-400"></i>コメントモード
+      </button>
+      <button class="mobile-menu-item" data-action="history">
+        <i class="fa-solid fa-clock-rotate-left text-orange-400"></i>変更履歴
+      </button>
+
+      <!-- 整理 -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">整理・引継ぎ</div>
+      <button class="mobile-menu-item" data-action="dashboard">
+        <i class="fa-solid fa-chalkboard-user text-orange-400"></i>先生用ダッシュボード
+      </button>
+
+      <!-- OCR（モバイル/タブレット） -->
+      <button class="mobile-menu-item" data-action="ocr">
+        <i class="fa-solid fa-magnifying-glass-chart text-pink-400"></i>
+        <span>手書き文字認識（OCR）</span>
+      </button>
+
+      <!-- 投票・挙手（v1.10.0 / Phase 10） -->
+      <button class="mobile-menu-item" data-action="poll">
+        <i class="fa-solid fa-square-poll-vertical text-rose-400"></i>
+        <span>投票をつくる</span>
+        <span class="ml-auto text-[9px] font-bold text-rose-500 bg-rose-100 px-1.5 py-0.5 rounded">NEW</span>
+      </button>
+      <button class="mobile-menu-item" data-action="handsup">
+        <i class="fa-solid fa-hand text-rose-400"></i>
+        <span>挙手をつくる</span>
+      </button>
+
+      <!-- ページ管理（モバイル/タブレット） -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">ページ</div>
+      <button class="mobile-menu-item" data-action="pages">
+        <i class="fa-solid fa-layer-group text-orange-400"></i>
+        <span>ページ一覧（<span id="mobile-page-count">1 / 1</span>）</span>
+      </button>
+
+      <!-- アプリ -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">アプリ</div>
+      <button id="btn-pwa-install-mobile" class="mobile-menu-item" data-action="pwa-install" style="display:none;">
+        <i class="fa-solid fa-mobile-screen-button text-orange-400"></i>
+        <span>アプリとしてインストール</span>
+      </button>
+      <button class="mobile-menu-item" data-action="pwa-install-guide">
+        <i class="fa-solid fa-house-circle-check text-orange-400"></i>
+        <span>ホーム画面に追加（説明）</span>
+      </button>
+
+      <!-- 教材テンプレート -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">教材テンプレート</div>
+      <button class="mobile-menu-item" data-action="template-gallery">
+        <i class="fa-solid fa-table-cells-large text-orange-400"></i>
+        <span>テンプレートを挿入</span>
+      </button>
+      <button class="mobile-menu-item" data-action="import-material">
+        <i class="fa-solid fa-file-import text-orange-400"></i>
+        <span>PDF・画像を取り込む</span>
+      </button>
+
+      <!-- ヘルプ -->
+      <div class="text-[10px] font-bold text-gray-400 px-3 pt-3 pb-1 uppercase tracking-wider">ヘルプ</div>
+      <button class="mobile-menu-item" data-action="help">
+        <i class="fa-solid fa-circle-question text-orange-400"></i>使い方
+      </button>
+    </div>
+  </aside>
+</div>
+
+<!-- ====== モバイル用ページパネル（ボトムシート） ====== -->
+<div id="mobile-pages-sheet" class="hidden fixed inset-0 z-40">
+  <div id="mobile-pages-backdrop" class="absolute inset-0 bg-black/40"></div>
+  <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[70vh] flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-orange-100">
+      <h3 class="font-bold text-gray-800"><i class="fa-solid fa-layer-group text-orange-400 mr-2"></i>ページ一覧</h3>
+      <button id="btn-mobile-pages-close" class="header-btn" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="mobile-pages-list" class="flex-1 overflow-y-auto p-3"></div>
+    <button id="mobile-btn-add-page" class="m-3 py-3 rounded-xl bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold transition">
+      <i class="fa-solid fa-plus mr-1"></i>ページを追加
+    </button>
+  </div>
+</div>
+
+<!-- ====== メインレイアウト ====== -->
+<div id="main-layout" class="relative flex" style="height: calc(100vh - 56px);">
+
+  <!-- ツールバー（左） -->
+  <aside id="toolbar" class="flex flex-col items-center gap-1.5 py-4 px-2 bg-white border-r border-orange-100 z-20">
+    <button class="tool-btn active" data-tool="select" title="選択 (V)"><i class="fa-solid fa-arrow-pointer"></i></button>
+    <button class="tool-btn" data-tool="pen" title="ペン (P)"><i class="fa-solid fa-pen"></i></button>
+    <button class="tool-btn" data-tool="marker" title="蛍光ペン (M)"><i class="fa-solid fa-highlighter"></i></button>
+    <button class="tool-btn" data-tool="eraser" title="消しゴム (E)"><i class="fa-solid fa-eraser"></i></button>
+    <button class="tool-btn" data-tool="sticky" title="付箋 (S)"><i class="fa-solid fa-note-sticky"></i></button>
+    <button class="tool-btn" data-tool="text" title="テキスト (T)"><i class="fa-solid fa-font"></i></button>
+    <button class="tool-btn" data-tool="shape" title="図形"><i class="fa-solid fa-shapes"></i></button>
+    <button class="tool-btn" data-tool="image" title="画像"><i class="fa-solid fa-image"></i></button>
+    <div class="w-8 h-px bg-orange-100 my-1"></div>
+    <button id="btn-tool-template" class="tool-btn tool-btn-template" title="教材テンプレートを挿入"><i class="fa-solid fa-table-cells-large"></i></button>
+    <button id="btn-tool-import" class="tool-btn tool-btn-import" title="PDF・画像を背景として取り込む"><i class="fa-solid fa-file-import"></i></button>
+    <button id="btn-tool-ocr" class="tool-btn tool-btn-ocr" title="手書き文字認識（OCR） - 児童の答案をテキスト化">
+      <i class="fa-solid fa-magnifying-glass-chart"></i>
+    </button>
+    <button id="btn-tool-poll" class="tool-btn tool-btn-poll" title="投票・挙手 - 児童全員の意見をリアルタイム集計">
+      <i class="fa-solid fa-square-poll-vertical"></i>
+      <span class="tool-btn-badge">NEW</span>
+    </button>
+    <button class="tool-btn" data-tool="laser" title="レーザーポインター"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+  </aside>
+
+  <!-- ツールオプションパネル（上にフロート） -->
+  <div id="tool-options" class="hidden absolute top-3 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-lg border border-orange-100 px-3 py-2 flex items-center gap-2 z-20"></div>
+
+  <!-- キャンバスエリア -->
+  <main id="canvas-wrapper" class="flex-1 relative bg-gradient-to-br from-orange-50 via-rose-50 to-purple-50 overflow-hidden">
+    <div id="canvas-container" class="absolute inset-0"></div>
+
+    <!-- ズームコントロール -->
+    <div id="zoom-controls" class="absolute bottom-4 right-4 bg-white rounded-full shadow-md border border-orange-100 flex items-center px-1.5 py-1 gap-0.5 z-10">
+      <button id="btn-zoom-out" class="zoom-btn" title="縮小"><i class="fa-solid fa-minus"></i></button>
+      <span id="zoom-level" class="text-xs font-semibold text-gray-700 w-12 text-center">100%</span>
+      <button id="btn-zoom-in" class="zoom-btn" title="拡大"><i class="fa-solid fa-plus"></i></button>
+      <div class="w-px h-5 bg-orange-100 mx-1"></div>
+      <button id="btn-zoom-fit" class="zoom-btn" title="画面に合わせる"><i class="fa-solid fa-expand"></i></button>
+    </div>
+  </main>
+
+  <!-- ページパネル（右） -->
+  <aside id="pages-panel" class="w-44 bg-white border-l border-orange-100 flex flex-col z-10">
+    <div class="px-3 py-2.5 border-b border-orange-100 flex items-center justify-between">
+      <span class="text-xs font-bold text-gray-600"><i class="fa-solid fa-layer-group mr-1 text-orange-400"></i>ページ</span>
+      <span id="page-count" class="text-[10px] text-gray-400">1 / 1</span>
+    </div>
+    <div id="pages-list" class="flex-1 overflow-y-auto px-2 py-2 space-y-2"></div>
+    <button id="btn-add-page" class="m-2 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-bold transition">
+      <i class="fa-solid fa-plus mr-1"></i>ページを追加
+    </button>
+  </aside>
+</div>
+
+<!-- ====== モーダル：PDF・画像取り込み（Phase 8） ====== -->
+<div id="modal-import" class="modal-backdrop hidden">
+  <div class="modal-panel" style="max-width: 560px;">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-gray-800">
+        <i class="fa-solid fa-file-import text-orange-400 mr-2"></i>教材を取り込む
+      </h3>
+      <button class="modal-close" data-close="modal-import"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">
+      <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>
+      PDFや画像を背景として取り込み、その上に書き込み・付箋で授業を展開できます。
+      PDFは最大10ページまで自動でボードページに分割されます。
+    </p>
+
+    <!-- ドロップゾーン -->
+    <div id="import-drop-zone" class="import-drop-zone">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl mb-2"></i>
+      <p class="font-bold text-sm">クリック or ここにドラッグ</p>
+      <p class="text-xs text-gray-500 mt-1">PDF / JPEG / PNG / WebP（最大30MB）</p>
+      <input type="file" id="import-file-input" accept=".pdf,application/pdf,image/*" style="display:none;" />
+    </div>
+
+    <!-- ステータスライン -->
+    <div id="import-status" class="import-status"></div>
+
+    <!-- 取り込み時の初期設定 -->
+    <div class="grid grid-cols-2 gap-3 mt-3">
+      <label class="text-xs font-semibold text-gray-600">
+        初期不透明度
+        <select id="import-init-opacity" class="mt-1 w-full text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 focus:outline-none">
+          <option value="1">100%（そのまま）</option>
+          <option value="0.8">80%</option>
+          <option value="0.6" selected>60%（推奨、書き込みやすい）</option>
+          <option value="0.4">40%（薄色）</option>
+        </select>
+      </label>
+      <label class="text-xs font-semibold text-gray-600">
+        初期配置サイズ
+        <select id="import-init-fit" class="mt-1 w-full text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 focus:outline-none">
+          <option value="contain" selected>収める（ボード内に収まるよう拡縮）</option>
+          <option value="cover">カバー（ボード全体を埋める）</option>
+          <option value="stretch">ストレッチ（伸ばしてピッタリ）</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- 現在ページの背景画像調整（取り込み後表示） -->
+    <div id="import-no-image-msg" class="mt-4 pt-3 border-t border-orange-100 text-xs text-gray-400 text-center" style="display:none;">
+      <i class="fa-regular fa-image mr-1"></i>このページにはまだ背景画像がありません
+    </div>
+
+    <div id="import-controls" class="mt-4 pt-3 border-t border-orange-100" style="display:none;">
+      <div class="text-xs font-bold text-gray-600 mb-2">
+        <i class="fa-solid fa-sliders text-orange-400 mr-1"></i>現在ページの背景画像を調整
+      </div>
+      <div class="space-y-3">
+        <div>
+          <div class="flex items-center justify-between text-xs font-semibold text-gray-600 mb-1">
+            <span>不透明度</span>
+            <span id="import-opacity-value" class="text-orange-500">60%</span>
+          </div>
+          <input id="import-opacity" type="range" min="10" max="100" value="60" step="5" class="w-full accent-orange-400" />
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-gray-600 mb-1">配置サイズ</div>
+          <select id="import-fit" class="w-full text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1.5 focus:outline-none">
+            <option value="contain">収める（ボード内に収まるよう拡縮）</option>
+            <option value="cover">カバー（ボード全体を埋める）</option>
+            <option value="stretch">ストレッチ（伸ばしてピッタリ）</option>
+          </select>
+        </div>
+        <button id="import-delete" class="w-full py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold transition">
+          <i class="fa-solid fa-trash-can mr-1"></i>このページの背景画像を削除
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：テンプレートギャラリー（Phase 7） ====== -->
+<div id="modal-templates" class="modal-backdrop hidden">
+  <div class="modal-panel modal-panel-wide">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-gray-800">
+        <i class="fa-solid fa-table-cells-large text-orange-400 mr-2"></i>教材テンプレートを挿入
+      </h3>
+      <button class="modal-close" data-close="modal-templates"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">
+      <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>
+      授業ですぐに使える枠組みをワンクリックで配置。色付き枠と例示付箋はそのまま編集できます。
+    </p>
+    <!-- カテゴリタブ -->
+    <div id="template-categories" class="flex flex-wrap gap-2 mb-4 pb-3 border-b border-orange-100"></div>
+    <!-- ギャラリー -->
+    <div id="template-gallery" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto" style="max-height: 60vh;"></div>
+  </div>
+</div>
+
+<!-- ====== モーダル：エクスポート ====== -->
+<!-- ====== モーダル：手書き文字認識（OCR / Phase 9） ====== -->
+<div id="modal-ocr" class="modal-backdrop hidden">
+  <div class="modal-panel" style="max-width: 720px;">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-gray-800">
+        <i class="fa-solid fa-magnifying-glass-chart text-pink-400 mr-2"></i>手書き文字認識（OCR）
+        <span class="ml-2 text-[10px] font-bold text-pink-500 bg-pink-100 px-2 py-0.5 rounded align-middle">NEW</span>
+      </h3>
+      <button class="modal-close" data-close="modal-ocr"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <p class="text-xs text-gray-500 mb-3">
+      <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>
+      児童の手書き答案や板書をテキスト化できます。ボード上で範囲をドラッグ選択するか、画像ファイルを直接アップロードしてください。
+      <span class="text-pink-600 font-semibold">※処理はすべてブラウザ内で完結します（外部送信なし）</span>
+    </p>
+
+    <!-- 入力エリア（プレビュー） -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <!-- 左：プレビュー画像 -->
+      <div>
+        <div class="text-xs font-bold text-gray-600 mb-1.5">
+          <i class="fa-solid fa-image text-pink-400 mr-1"></i>認識対象
+        </div>
+        <div class="ocr-preview-wrap bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-center overflow-hidden" style="min-height: 180px; max-height: 280px;">
+          <img id="ocr-preview-img" alt="OCR対象プレビュー" style="max-width:100%; max-height:280px; display:none;" />
+          <div id="ocr-preview-placeholder" class="text-center text-gray-400 text-xs px-4 py-8">
+            <i class="fa-regular fa-image text-3xl mb-2 block"></i>
+            ボードでドラッグ選択するか、<br>下のボタンから画像を選んでください
+          </div>
+        </div>
+
+        <!-- ファイルアップロード -->
+        <div class="mt-2 flex gap-2">
+          <button id="ocr-upload-btn" class="flex-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-2 px-3 rounded-lg transition">
+            <i class="fa-solid fa-upload mr-1"></i>画像ファイル
+          </button>
+          <input type="file" id="ocr-file-input" accept="image/*" style="display:none;" />
+          <button id="ocr-rerun" class="flex-1 text-xs bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-2 px-3 rounded-lg transition" disabled>
+            <i class="fa-solid fa-rotate mr-1"></i>再認識
+          </button>
+        </div>
+
+        <!-- 言語選択 -->
+        <div class="mt-2">
+          <label class="text-xs font-semibold text-gray-600 block mb-1">認識する言語</label>
+          <select id="ocr-lang-select" class="w-full text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1.5 focus:outline-none">
+            <option value="jpn+eng" selected>日本語 + 英語（推奨）</option>
+            <option value="jpn">日本語のみ（速い）</option>
+            <option value="eng">英語のみ（最速）</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 右：結果テキスト -->
+      <div>
+        <div class="text-xs font-bold text-gray-600 mb-1.5">
+          <i class="fa-solid fa-keyboard text-pink-400 mr-1"></i>認識結果（編集可能）
+        </div>
+        <textarea id="ocr-result-textarea"
+          class="w-full text-sm bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:border-pink-300"
+          rows="9"
+          placeholder="ここに認識されたテキストが表示されます。手で修正もできます。"></textarea>
+        <p class="text-[10px] text-gray-400 mt-1">
+          <i class="fa-solid fa-circle-info mr-1"></i>手書き文字は誤認識することがあります。挿入前に必ず確認してください。
+        </p>
+      </div>
+    </div>
+
+    <!-- 進捗バー -->
+    <div id="ocr-progress" class="ocr-progress mt-3" style="display:none;">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span id="ocr-progress-label" class="font-semibold text-gray-700">準備中…</span>
+        <span id="ocr-progress-pct" class="text-pink-600 font-bold">0%</span>
+      </div>
+      <div class="w-full h-2 bg-orange-100 rounded-full overflow-hidden">
+        <div id="ocr-progress-bar" class="h-full bg-gradient-to-r from-pink-400 to-orange-400 transition-all" style="width:0%;"></div>
+      </div>
+    </div>
+
+    <!-- アクションボタン -->
+    <div class="mt-4 pt-3 border-t border-orange-100">
+      <div class="text-xs font-bold text-gray-600 mb-2">
+        <i class="fa-solid fa-arrow-right-to-bracket text-pink-400 mr-1"></i>ボードに挿入
+      </div>
+
+      <!-- 付箋の色選択 -->
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-gray-600">付箋の色：</span>
+        <div id="ocr-sticky-color" class="flex gap-1.5"></div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button id="ocr-insert-text" class="ocr-action-btn bg-blue-100 hover:bg-blue-200 text-blue-700">
+          <i class="fa-solid fa-font text-xl mb-1"></i>
+          <div class="font-bold text-sm">テキストとして</div>
+          <div class="text-[10px] opacity-80">そのまま文字オブジェクト</div>
+        </button>
+        <button id="ocr-insert-sticky" class="ocr-action-btn bg-yellow-100 hover:bg-yellow-200 text-yellow-800">
+          <i class="fa-solid fa-note-sticky text-xl mb-1"></i>
+          <div class="font-bold text-sm">付箋として</div>
+          <div class="text-[10px] opacity-80">選んだ色の付箋</div>
+        </button>
+        <button id="ocr-copy" class="ocr-action-btn bg-purple-100 hover:bg-purple-200 text-purple-700">
+          <i class="fa-solid fa-copy text-xl mb-1"></i>
+          <div class="font-bold text-sm">クリップボード</div>
+          <div class="text-[10px] opacity-80">コピーして他で使う</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：投票・挙手作成（Phase 10 / v1.10.0） ====== -->
+<div id="modal-poll" class="modal-backdrop hidden" data-variant="poll">
+  <div class="modal-panel" style="max-width: 600px;">
+    <div class="flex items-center justify-between mb-3">
+      <h3 id="poll-modal-title" class="text-lg font-bold text-gray-800">
+        🗳️ 投票をつくる
+        <span class="ml-2 text-[10px] font-bold text-rose-500 bg-rose-100 px-2 py-0.5 rounded align-middle">NEW</span>
+      </h3>
+      <button class="modal-close" data-close="modal-poll"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- 種類切替タブ -->
+    <div class="flex gap-2 mb-3 p-1 bg-orange-50 rounded-xl">
+      <button class="poll-variant-tab active" data-variant="poll">
+        <i class="fa-solid fa-square-poll-vertical mr-1"></i>選択肢で投票
+      </button>
+      <button class="poll-variant-tab" data-variant="handsup">
+        <i class="fa-solid fa-hand mr-1"></i>挙手（YES/NO）
+      </button>
+    </div>
+
+    <p class="text-xs text-gray-500 mb-3">
+      <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>
+      ボードに投票カードを置き、児童は選択肢をタップして即時投票。リアルタイムで棒グラフが伸びます。
+      <span class="text-rose-600 font-semibold">※P2P参加者全員に自動同期</span>
+    </p>
+
+    <!-- 質問入力 -->
+    <div class="mb-3">
+      <label class="text-xs font-bold text-gray-600 block mb-1">
+        <i class="fa-solid fa-comment-question text-rose-400 mr-1"></i>質問
+      </label>
+      <input id="poll-question" type="text" maxlength="100"
+        class="w-full text-sm bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:border-rose-300"
+        placeholder="例：放課後の係活動、どれをやりたい？" />
+    </div>
+
+    <!-- 選択肢リスト -->
+    <div class="mb-3">
+      <label class="text-xs font-bold text-gray-600 block mb-2">
+        <i class="fa-solid fa-list-check text-rose-400 mr-1"></i>選択肢（2〜6個）
+      </label>
+      <div id="poll-options-list" class="space-y-2"></div>
+      <button id="poll-add-option" type="button"
+        class="mt-2 w-full text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-2 px-3 rounded-lg transition">
+        <i class="fa-solid fa-plus mr-1"></i>選択肢を追加
+      </button>
+    </div>
+
+    <!-- 設定 -->
+    <div class="mb-4 pt-3 border-t border-orange-100">
+      <div class="text-xs font-bold text-gray-600 mb-2">
+        <i class="fa-solid fa-sliders text-rose-400 mr-1"></i>設定
+      </div>
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+          <input id="poll-multi" type="checkbox" class="w-4 h-4 accent-rose-400" />
+          <span>複数選択を許可（チェックボックス型）</span>
+        </label>
+        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+          <input id="poll-anonymous" type="checkbox" class="w-4 h-4 accent-rose-400" checked />
+          <span>無記名投票（投票者の名前を出さない）</span>
+        </label>
+        <label class="flex items-center gap-2 text-xs text-gray-700">
+          <span class="font-semibold">結果の表示：</span>
+          <select id="poll-show-results"
+            class="text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 focus:outline-none">
+            <option value="always" selected>常に表示（リアルタイム）</option>
+            <option value="after-vote">自分が投票してから表示</option>
+            <option value="after-close">締切後にだけ表示</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <!-- アクション -->
+    <div class="flex gap-2">
+      <button class="flex-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition" data-close="modal-poll">
+        キャンセル
+      </button>
+      <button id="poll-submit"
+        class="flex-1 text-sm bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white font-bold py-2.5 rounded-lg transition shadow">
+        <i class="fa-solid fa-plus mr-1"></i>ボードに置く
+      </button>
+    </div>
+
+    <p class="text-[10px] text-gray-400 mt-3 text-center">
+      <i class="fa-solid fa-circle-info mr-1"></i>
+      作成後、カードを右クリックで「締切」「集計リセット」ができます。
+    </p>
+  </div>
+</div>
+
+<div id="modal-export" class="modal-backdrop hidden">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-download text-orange-400 mr-2"></i>保存・エクスポート</h3>
+      <button class="modal-close" data-close="modal-export"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <button class="export-card" data-export="png-current">
+        <i class="fa-solid fa-image text-3xl text-pink-400 mb-2"></i>
+        <div class="font-bold text-sm">現在のページ</div>
+        <div class="text-[10px] text-gray-500">PNG画像</div>
+      </button>
+      <button class="export-card" data-export="png-all">
+        <i class="fa-solid fa-images text-3xl text-orange-400 mb-2"></i>
+        <div class="font-bold text-sm">全ページ</div>
+        <div class="text-[10px] text-gray-500">PNG（複数）</div>
+      </button>
+      <button class="export-card" data-export="pdf">
+        <i class="fa-solid fa-file-pdf text-3xl text-red-400 mb-2"></i>
+        <div class="font-bold text-sm">PDF</div>
+        <div class="text-[10px] text-gray-500">全ページ</div>
+      </button>
+      <button class="export-card" data-export="json">
+        <i class="fa-solid fa-file-code text-3xl text-purple-400 mb-2"></i>
+        <div class="font-bold text-sm">ボードデータ</div>
+        <div class="text-[10px] text-gray-500">JSON（再編集可）</div>
+      </button>
+    </div>
+    <div class="mt-4 pt-4 border-t border-orange-100">
+      <label class="flex items-center gap-2 cursor-pointer hover:bg-orange-50 p-2 rounded-lg">
+        <i class="fa-solid fa-upload text-purple-400"></i>
+        <span class="text-sm font-semibold text-gray-700">JSONファイルから復元</span>
+        <input type="file" id="import-json" accept=".json" class="hidden" />
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：共有・招待 ====== -->
+<div id="modal-share" class="modal-backdrop hidden">
+  <div class="modal-panel max-w-lg">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-user-plus text-orange-400 mr-2"></i>みんなで一緒に編集する</h3>
+      <button class="modal-close" data-close="modal-share"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <p class="text-sm text-gray-600 mb-4">
+      下の<b class="text-orange-500">招待リンク</b>を先生や児童に送ると、同じボードを<b>同時に編集</b>できます。<br>
+      <span class="text-xs text-gray-500">※ アカウント登録は必要ありません。</span>
+    </p>
+
+    <!-- 招待リンク -->
+    <div class="bg-orange-50 rounded-xl p-3 mb-3">
+      <div class="text-[10px] font-bold text-orange-500 mb-1">招待リンク</div>
+      <div class="flex items-center gap-2">
+        <input id="share-url" type="text" readonly class="flex-1 bg-white border border-orange-200 rounded-lg px-3 py-2 text-xs text-gray-700 font-mono focus:outline-none focus:ring-2 focus:ring-orange-200" />
+        <button id="btn-copy-url" class="px-3 py-2 bg-orange-400 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition whitespace-nowrap">
+          <i class="fa-regular fa-copy mr-1"></i>コピー
+        </button>
+        <button id="btn-show-qr" class="px-3 py-2 bg-purple-400 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition whitespace-nowrap" title="QRコードを表示">
+          <i class="fa-solid fa-qrcode mr-1"></i>QR
+        </button>
+      </div>
+
+      <!-- QRコード（児童端末への一括配布用） -->
+      <div id="qr-section" class="hidden mt-3 pt-3 border-t border-orange-200 text-center">
+        <div class="text-[10px] font-bold text-orange-500 mb-2">児童の端末でこのQRをスキャンして参加</div>
+        <div id="qr-canvas" class="inline-block p-3 bg-white rounded-xl shadow-sm"></div>
+        <div class="mt-2 flex justify-center gap-2">
+          <button id="btn-qr-print" class="px-3 py-1.5 bg-white border border-orange-200 hover:bg-orange-50 text-orange-600 text-xs font-bold rounded-lg transition">
+            <i class="fa-solid fa-print mr-1"></i>印刷
+          </button>
+          <button id="btn-qr-download" class="px-3 py-1.5 bg-white border border-orange-200 hover:bg-orange-50 text-orange-600 text-xs font-bold rounded-lg transition">
+            <i class="fa-solid fa-download mr-1"></i>PNG保存
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ニックネーム -->
+    <div class="bg-purple-50 rounded-xl p-3 mb-3">
+      <div class="text-[10px] font-bold text-purple-500 mb-1">あなたの名前（みんなに表示されます）</div>
+      <div class="flex items-center gap-2">
+        <div id="my-color-chip" class="w-8 h-8 rounded-full border-2 border-white shadow flex-shrink-0"></div>
+        <input id="my-name" type="text" maxlength="20" placeholder="例：3年A組 さくらい先生" class="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-200" />
+      </div>
+      <p class="text-[10px] text-gray-500 mt-1.5">色をクリックすると変えられます</p>
+    </div>
+
+    <!-- 接続状態 -->
+    <div class="bg-gray-50 rounded-xl p-3 mb-3">
+      <div class="text-[10px] font-bold text-gray-500 mb-2">接続状態</div>
+      <div class="text-sm text-gray-700 space-y-1">
+        <div>状態：<span id="conn-status" class="font-bold">準備中…</span></div>
+        <div>役割：<span id="conn-role" class="font-bold">-</span></div>
+        <div>参加者：<span id="conn-count" class="font-bold">1人</span></div>
+      </div>
+    </div>
+
+    <!-- 接続中のユーザーリスト -->
+    <div class="bg-white border border-orange-100 rounded-xl p-3">
+      <div class="text-[10px] font-bold text-gray-500 mb-2"><i class="fa-solid fa-users mr-1"></i>参加中の人</div>
+      <div id="users-list" class="space-y-1.5 max-h-32 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：ヘルプ ====== -->
+<div id="modal-help" class="modal-backdrop hidden">
+  <div class="modal-panel max-w-3xl">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-circle-question text-orange-400 mr-2"></i>みんなのジャムの使い方 <span class="text-xs text-gray-400 font-normal">v1.10.0</span></h3>
+      <button class="modal-close" data-close="modal-help"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- タブ切替 -->
+    <div id="help-tabs" class="flex gap-1 border-b-2 border-orange-100 mb-3 overflow-x-auto" style="scrollbar-width:thin;">
+      <button class="help-tab active" data-tab="whatsnew"><i class="fa-solid fa-sparkles mr-1"></i><span class="text-rose-500">🆕</span>新機能</button>
+      <button class="help-tab" data-tab="basic"><i class="fa-solid fa-pen-to-square mr-1"></i>基本の描画</button>
+      <button class="help-tab" data-tab="page"><i class="fa-regular fa-file-lines mr-1"></i>ページ・背景</button>
+      <button class="help-tab" data-tab="board"><i class="fa-solid fa-folder-tree mr-1"></i>ボード管理</button>
+      <button class="help-tab" data-tab="collab"><i class="fa-solid fa-users mr-1"></i>共同編集</button>
+      <button class="help-tab" data-tab="teacher"><i class="fa-solid fa-chalkboard-user mr-1"></i>授業ツール</button>
+      <button class="help-tab" data-tab="poll"><i class="fa-solid fa-square-poll-vertical mr-1"></i>投票・挙手</button>
+      <button class="help-tab" data-tab="ocr"><i class="fa-solid fa-magnifying-glass-chart mr-1"></i>OCR</button>
+      <button class="help-tab" data-tab="import"><i class="fa-solid fa-file-import mr-1"></i>教材取込</button>
+      <button class="help-tab" data-tab="template"><i class="fa-solid fa-graduation-cap mr-1"></i>テンプレート</button>
+      <button class="help-tab" data-tab="pwa"><i class="fa-solid fa-mobile-screen mr-1"></i>PWAオフライン</button>
+      <button class="help-tab" data-tab="organize"><i class="fa-solid fa-tags mr-1"></i>整理・引継ぎ</button>
+      <button class="help-tab" data-tab="giga"><i class="fa-solid fa-tablet-screen-button mr-1"></i>GIGA端末</button>
+      <button class="help-tab" data-tab="shortcut"><i class="fa-solid fa-keyboard mr-1"></i>ショートカット</button>
+    </div>
+
+    <div class="space-y-3 text-sm text-gray-700 max-h-[58vh] overflow-y-auto pr-2">
+
+      <!-- ===== タブ0: 🆕新機能リリースノート ===== -->
+      <div class="help-tab-content" data-tab="whatsnew">
+        <div class="help-section bg-gradient-to-r from-rose-50 to-pink-50 border-l-4 border-rose-400 rounded-r">
+          <h4><i class="fa-solid fa-square-poll-vertical text-rose-500"></i> v1.10.0 最新：🗳️ 投票・挙手機能 <span class="ml-1 px-1.5 py-0.5 text-[10px] bg-rose-500 text-white rounded">NEW</span></h4>
+          <p>クラス全員の意見を <b>ボード上でリアルタイム集計</b> 、棒グラフで見える化できます。「賛成の人、手を上げて」をデジタル化。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li>🗳️ 投票モード（最大6選択肢）/ ✋ 挙手モード（「はい！/まだです」の2拞）</li>
+            <li>P2P全体同期で、児童のタップがすぐ棒グラフに反映</li>
+            <li>結果公開タイミング3モード：「いつでも」/「自分が投票したら」/「締切り後」</li>
+            <li>1人1票保障、複数選択も切替可能</li>
+          </ul>
+          <p class="mt-1 text-xs text-gray-500">詳しくは 「<b>投票・挙手</b>」タブへ。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass-chart text-pink-500"></i> v1.9.0：🔍 手書き文字認識（OCR）</h4>
+          <p>児童の手書き答案を <b>ドラッグで選択だけ</b> でテキスト化、付箋やテキストとしてボードに貼り付けられます。Tesseract.js 完全クライアント側動作、外部送信なし。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-file-import text-amber-500"></i> v1.8.0：📄 PDF・画像教材の取り込み</h4>
+          <p>PDFのワークシートや取材画像を <b>背景としてページに敷き</b> 、その上にそのまま書き込めます。複数ページPDFは各ページを個別背景として一括接続。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-graduation-cap text-purple-500"></i> v1.7.0：📚 教材テンプレート15種</h4>
+          <p>ベン図・Yチャート・Tチャート・KWLシート・振り返り・クラス会議など <b>すぐ使える15種類</b> の授業テンプレート。ギャラリー画面からクリックで貼り付けてすぐ授業を始められます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-mobile-screen text-green-500"></i> v1.6.0：📱 PWA化（オフライン動作）</h4>
+          <p>ホーム画面に追加できる <b>アプリとして使える</b> ように。Wi-Fiが不安定な教室でも、一度読み込んだらオフラインで動作します。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-circle-info text-blue-500"></i> これまでの主な機能（v1.0～v1.5）</h4>
+          <p class="text-xs text-gray-600">付箋・ペン・蘒光ペン・図形・テキスト・画像・レーザーポインター、複数ページ・五線譜背景・原稿用紙背景、P2P共同編集・コメント・参加者カーソル・変更履歴タイムライン、先生モード・タイマー・ボードロック、QR配布シート、教科・学年・タグ・フォルダ、先生ダッシュボード、全データバックアップ、GIGA端末最適化（タッチ・ペン・手のひら誤接触ブロック） — すべてそのまま使えます。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ1: 基本の描画 ===== -->
+      <div class="help-tab-content hidden" data-tab="basic">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-arrow-pointer text-orange-400"></i> 選択ツール（<span class="kbd">V</span>）</h4>
+          <p>オブジェクトをクリックして<b>移動・拡大縮小・回転</b>ができます。<b>ダブルクリック</b>で文字編集（付箋・テキスト）。複数選択は<b>Shift+クリック</b>。<b>右クリック</b>で「最前面・最背面・複製・ロック切替・削除」のメニューが出ます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-pen text-orange-400"></i> ペン（<span class="kbd">P</span>）・蛍光ペン（<span class="kbd">M</span>）</h4>
+          <p>自由に線を描きます。ペンは<b>7色×4段階の太さ</b>、蛍光ペンは<b>7色×3段階</b>（半透明）。下書きの上から重ねて強調するときに蛍光ペンが便利です。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-eraser text-orange-400"></i> 消しゴム（<span class="kbd">E</span>）</h4>
+          <p><b>3段階のサイズ</b>。オブジェクト単位で削除されます（部分消しではありません）。間違って消したら<span class="kbd">Ctrl+Z</span>で戻せます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-note-sticky text-orange-400"></i> 付箋（<span class="kbd">S</span>）</h4>
+          <p>カラフルな付箋を貼れます。<b>6色</b>から選べて、<b>ダブルクリック</b>で文字を書き換えられます。意見出しや振り返りに最適。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-font text-orange-400"></i> テキスト（<span class="kbd">T</span>）・図形・画像</h4>
+          <p>文字入力、四角・丸・三角・直線・矢印の<b>図形</b>、写真の<b>画像挿入</b>ができます。画像は<b>ドラッグ＆ドロップ</b>や<b>クリップボード貼り付け（Ctrl+V）</b>でも貼れます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-bullseye text-orange-400"></i> レーザーポインター</h4>
+          <p>授業中の説明用。<b>赤い点</b>がカーソルに追従して、書き込まずに「ここを見て」を伝えられます。共同編集中は他の人にも見えます。</p>
+        </div>
+        <div class="help-section bg-rose-50/40 border-l-4 border-rose-300 rounded-r">
+          <h4><i class="fa-solid fa-square-poll-vertical text-rose-500"></i> 🆕 投票・挙手（<span class="kbd">v1.10</span>）</h4>
+          <p>ツールバー下部の <b>🗳️投票ボタン</b>（ロース色）で、質問＋最大6選択肢の<b>投票カード</b>をボードに配置できます。「✋挙手モード」は YES/NO の2拓プリセット。詳しくは <b>投票・挙手</b> タブへ。</p>
+        </div>
+        <div class="help-section bg-pink-50/40 border-l-4 border-pink-300 rounded-r">
+          <h4><i class="fa-solid fa-magnifying-glass-chart text-pink-500"></i> 🆕 手書き文字認識 OCR（<span class="kbd">v1.9</span>）</h4>
+          <p>ツールバーの <b>🔍OCRボタン</b> でOCRモードを起動 → 範囲をドラッグするだけで手書きをテキスト化、付箋やテキストとして即挿入。詳しくは <b>OCR</b> タブへ。</p>
+        </div>
+        <div class="help-section bg-amber-50/40 border-l-4 border-amber-300 rounded-r">
+          <h4><i class="fa-solid fa-file-import text-amber-500"></i> 🆕 教材取り込み（<span class="kbd">v1.8</span>） / テンプレート（<span class="kbd">v1.7</span>）</h4>
+          <p><b>📥取込ボタン</b> でPDFや写真を背景に、<b>🎓テンプレートボタン</b> で15種の授業テンプレを即配置。それぞれ <b>教材取込</b> / <b>テンプレート</b> タブへ。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ2: ページ・背景 ===== -->
+      <div class="help-tab-content hidden" data-tab="page">
+        <div class="help-section">
+          <h4><i class="fa-regular fa-file-lines text-orange-400"></i> 複数ページ管理</h4>
+          <p>右パネルに<b>ページ一覧</b>が並びます。「+」で<b>追加</b>、各ページの「⋯」から<b>複製・削除</b>。サムネイルは自動更新されます。授業の流れに合わせて使い分け：1ページ目「めあて」→2ページ目「考え」→3ページ目「まとめ」など。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-table-cells text-orange-400"></i> 基本背景</h4>
+          <p>各ページの背景を<b>無地・方眼・ドット・罫線</b>から選べます。右パネルのページ一覧から各ページごとに切替可能。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-graduation-cap text-orange-400"></i> 教材テンプレート背景（v1.3.0）</h4>
+          <p>右パネルの背景セレクタから<b>5種類の教材用背景</b>を選べます：</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li>📖 <b>原稿用紙</b> — 国語・作文指導</li>
+            <li>📐 <b>算数方眼+座標軸</b> — 算数・関数グラフ・図形指導</li>
+            <li>🔍 <b>観察カード</b> — 理科・生活科の観察記録</li>
+            <li>🎵 <b>5線譜</b> — 音楽科</li>
+            <li>✏️ <b>書写ガイド</b> — 書写・書道・美術</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass text-orange-400"></i> ズーム・スクロール</h4>
+          <p>左下の<b>ズームボタン</b>または<span class="kbd">Ctrl + マウスホイール</span>で拡大縮小。タッチ端末では<b>2本指ピンチ</b>でも操作できます。<b>ホイール</b>でスクロール、<b>2本指ドラッグ</b>でパン（移動）。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ3: ボード管理 ===== -->
+      <div class="help-tab-content hidden" data-tab="board">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-house text-orange-400"></i> スタート画面（v1.2.0）</h4>
+          <p>URLに<code>?board=</code>が無い時は<b>選択画面</b>が出ます。「<b>新しいボードを作る</b>」「<b>招待リンクから参加</b>」「<b>最近のボードから選ぶ</b>」の3通り。一度閉じても自動で前のボードに戻りません。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-file-circle-plus text-orange-400"></i> 新しいボードを作る</h4>
+          <p>ヘッダーの「<b>📄+ 新しいボード</b>」ボタン、またはスタート画面の同名ボタン。毎回<b>ユニークなID</b>（<code>board_xxxxxxxx</code>）が発行されるので、別の授業・教科ごとに作ってください。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-folder-open text-orange-400"></i> ボード一覧</h4>
+          <p>ヘッダーの「<b>📁 ボード一覧</b>」で、ローカルに保存された全ボードを<b>更新時刻順</b>に表示。教科・学年・タグでの<b>検索フィルタ</b>が使えます（v1.5.0で大幅強化）。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-floppy-disk text-orange-400"></i> 保存とエクスポート</h4>
+          <p>編集内容は<b>常時自動保存</b>（localStorage）。「<b>保存</b>」ボタンから：</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>PNG</b>：現在ページ単体 / 全ページ（連番）</li>
+            <li><b>PDF</b>：全ページを1つのPDFに（配布資料用）</li>
+            <li><b>JSON</b>：再編集可能な形式で保存→他端末で復元可</li>
+          </ul>
+          <p class="mt-1 text-xs text-gray-500">💡 <b>背景画像（v1.8）・投票カード（v1.10）</b> も PNG/PDF に1枚絵として焼き付けられます。授業のまとめを学級通信に貼り付けるのも簡単。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ4: 共同編集 ===== -->
+      <div class="help-tab-content hidden" data-tab="collab">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-link text-orange-400"></i> 招待リンクで一緒に書く</h4>
+          <p>右上の<b>「招待」ボタン</b>→<b>URLをコピー</b>して児童・他の先生に送ります。同じリンクを開いた人と<b>リアルタイム</b>で書き込めます（WebRTC P2P・アカウント不要）。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-qrcode text-orange-400"></i> QRコード共有（v1.3.0）</h4>
+          <p>招待モーダルの「<b>QR</b>」ボタンでURLをQR化。「<b>印刷</b>」ボタンで<b>A4配布シート</b>（タイトル・拡大QR・URL・「ひらきかた」付き）を生成、「<b>PNG保存</b>」で720×720pxの画像を出力。タブレット一括配布や黒板投影に便利です。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-arrow-pointer text-orange-400"></i> 参加者カーソル・選択範囲（v1.4.0）</h4>
+          <p>他の参加者の<b>マウス位置</b>が色付き矢印＋名前で見えます。<b>選択中のオブジェクト</b>は色付き点線枠で他の人にも表示されるので、誰がどこを編集しているか一目で分かります。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-comment-dots text-orange-400"></i> コメント機能（v1.4.0）</h4>
+          <p>ヘッダーの「<b>💬コメント</b>」ボタンでコメントモードON→ボード上をクリックで<b>ピン</b>を立てる。ピンをクリックすると<b>本文・返信スレッド・解決ボタン</b>。授業中の質問や添削に使えます。「もう少し詳しく」「ここ合ってる？」など。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-clock-rotate-left text-orange-400"></i> 変更履歴タイムライン（v1.4.0）</h4>
+          <p>ヘッダーの「<b>🕒履歴</b>」ボタンで、これまでの全ステップを<b>サムネイル付き一覧</b>表示。任意のステップに「<b>このステップに戻す</b>」でワンクリックジャンプ可能。子どもが間違って大量に消してしまった時の救済にも。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-user-pen text-orange-400"></i> ニックネーム・色設定</h4>
+          <p>共有ダイアログから<b>表示名と色</b>を変更できます。例：「3年A組 さくらい先生」「たろう（はん長）」。最大5名分のアバターがヘッダーに並びます。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ5: 授業ツール ===== -->
+      <div class="help-tab-content hidden" data-tab="teacher">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-chalkboard-user text-orange-400"></i> 先生モード / ボードロック（v1.3.0）</h4>
+          <p>ヘッダーの「<b>生徒</b>」ボタンを「<b>先生</b>」に切替。先生モードで描いたオブジェクトは<b>自動でロック</b>され、生徒モードの参加者は<b>選択・移動・削除できません</b>。授業のめあてや配布物を固定できます。</p>
+          <p class="mt-1 text-xs text-gray-500">右クリックメニューの「<b>ロック切替</b>」で個別オブジェクトのロックを追加・解除できます（先生モード時のみ）。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-stopwatch text-orange-400"></i> 簡易タイマー（v1.3.0）</h4>
+          <p>ヘッダーの「<b>⏱タイマー</b>」ボタンで<b>フロートパネル</b>を表示（ドラッグで好きな位置へ）。グループワーク・自学・テスト演習に便利。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>プリセット</b>：1分・3分・5分・10分・15分・30分</li>
+            <li><b>任意設定</b>：分・秒で自由に</li>
+            <li>残り30秒で<b>オレンジ</b>、残り10秒で<b>赤点滅</b></li>
+            <li>0秒で<b>アラーム音</b>＋画面フラッシュ＋通知</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-clone text-orange-400"></i> 複製と整列（基本機能）</h4>
+          <p>選択中に<span class="kbd">Ctrl+D</span>または右クリック→「<b>複製</b>」で同じものを増やせます。図形を授業のスタンプ代わりに使えます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-rotate-left text-orange-400"></i> 元に戻す・やり直し（最大50ステップ）</h4>
+          <p><span class="kbd">Ctrl+Z</span>で元に戻す、<span class="kbd">Ctrl+Y</span>でやり直し。間違ってもすぐ復帰できるので、児童には「失敗してもいいから挑戦してみよう」と伝えやすいです。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ：投票・挙手（v1.10.0） ===== -->
+      <div class="help-tab-content hidden" data-tab="poll">
+        <div class="help-section bg-gradient-to-r from-rose-50 to-pink-50 border-l-4 border-rose-400 rounded-r">
+          <h4><i class="fa-solid fa-square-poll-vertical text-rose-500"></i> 🗳️ 投票を作る（v1.10.0）</h4>
+          <p>左ツールバーの <b>🗳️ 投票ボタン</b>（ローズ色）を押すと作成モーダルが開きます。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>質問文</b>（最大100文字）例：「放課後の係活動、どれをやりたい？」</li>
+            <li><b>選択肢</b>（2～6個）— 絵文字ボタンをクリックして1列8字パレットから変更、カラーは6色自動割り当て</li>
+            <li><b>+ 選択肢追加</b> ボタンで最大6個まで、「×」ボタンで個別削除</li>
+            <li><b>「作成」</b>を押すとボード中央に投票カードが配置</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-hand-point-up text-rose-500"></i> ✋ 挙手モード（YES/NO即答）</h4>
+          <p>作成モーダル上部のタブで <b>「✋ 挙手」</b> を選ぶと、「はい！」「まだです」の2拞プリセットでカードが作れます。「今、できた人？」という一連の授業チェックに最適。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-gear text-rose-500"></i> 3つの設定オプション</h4>
+          <ul class="ml-4 list-disc text-xs text-gray-600 space-y-2">
+            <li><b>複数選択を許可</b>：OFFなら1人1票、ONなら複数選択肢にチェック可能（「好きなスポーツをすべて選んで」というシーン）</li>
+            <li><b>匿名投票</b>：デフォルトON。同端末からの重複投票は常に防ぐ仕組み（localStorageベースの匿名ID）</li>
+            <li><b>結果の見せ方</b>：3選択
+              <ul class="ml-4 list-[circle] mt-1">
+                <li><code>いつでも</code> — 棒グラフをずっと表示</li>
+                <li><code>自分が投票したら</code> — 他人の意見に予想差されずに考えさせたい時に</li>
+                <li><code>締め切り後</code> — 先生がタイミングをコントロールして一斉公開</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-bullseye text-rose-500"></i> 児童の投票方法</h4>
+          <p><b>選択肢をタップするだけ</b>。リアルタイムで棒グラフが伸び、全員の画面に反映されます。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li>同じ選択肢をもう一度タップ → 投票取り消し</li>
+            <li>別の選択肢をタップ → そちらに切り替え（単一選択モード時）</li>
+            <li>複数選択モードならタップごとにON/OFFトグル</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-chalkboard-user text-rose-500"></i> 先生のコントロール（右クリックメニュー）</h4>
+          <p>投票カードを右クリック（タブレットは長押し）で以下の操作：</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li>🔒 <b>締め切る</b>：以降の投票を受け付けない（もう一度押せば再開オープン）</li>
+            <li>🔄 <b>集計をリセット</b>：確認ダイアログ付き、やり直し可能</li>
+            <li>選択ツールでカードの角をつかんで <b>サイズ変更</b>（テキストもレイアウトも坊れず調整されます）</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-lightbulb text-rose-500"></i> 授業活用シーン例</h4>
+          <p class="text-xs text-gray-600">
+            ・<b>導入</b>：「今日のめあて、どれが一番難しそう？」を授業開始直後に投票 → 難所を可視化<br/>
+            ・<b>意見表明の背中押し</b>：「この意見に賛成？」挙手モードで5秒チェック<br/>
+            ・<b>クラス会議</b>：議題に対して三選択肢 → 上位2つをグループで話し合い<br/>
+            ・<b>振り返り</b>：「今日の学習、よくわかった？」挙手モードで素早く<br/>
+            ・<b>授業を裂く質問</b>：「この問題、どれを選ぶ？」で潜在なつまずきを見つける
+          </p>
+        </div>
+      </div>
+
+      <!-- ===== タブ：OCR（v1.9.0） ===== -->
+      <div class="help-tab-content hidden" data-tab="ocr">
+        <div class="help-section bg-gradient-to-r from-pink-50 to-rose-50 border-l-4 border-pink-400 rounded-r">
+          <h4><i class="fa-solid fa-magnifying-glass-chart text-pink-500"></i> 🔍 手書き答案をテキスト化（v1.9.0）</h4>
+          <p>左ツールバーの <b>🔍OCRボタン</b> でOCRモードを起動。タブレットで受け取った児童の手書き答案を <b>その場でデジタル化</b> し、クラスチャートに並べて議論させる使い方に最適。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-arrows-up-down-left-right text-pink-500"></i> 2つの使い方</h4>
+          <ul class="ml-4 list-disc text-xs text-gray-600 space-y-2">
+            <li><b>ドラッグ選択</b>：OCRモード中にボード上で範囲をドラッグ → 破線枠でプレビュー → 離すと自動でOCR開始。貼り付けた画像の一部だけを認識させるのに便利</li>
+            <li><b>ファイルアップロード</b>：スマホで撮った答案画像を直接アップロード（最大20MB / PNG・JPEG・WebP）</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-language text-pink-500"></i> 認識言語の選択</h4>
+          <p>「<b>日本語＋英語</b>」（推奨）/ 「日本語のみ」 / 「英語のみ」を途中でも切替可能。初回のみ言語データ（約13MB）をDLし、以降はオフラインでも動作します。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-list-check text-pink-500"></i> 5つの挿入モード</h4>
+          <p>認識結果は<b>その場で修正可能</b>（textarea）。誤認識をそのまま使わずに済みます。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>テキストオブジェクト</b>として挿入</li>
+            <li><b>付箋</b>として挿入（6色から選択）</li>
+            <li><b>クリップボードコピー</b>（他アプリへ貪り付け）</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-shield-halved text-pink-500"></i> プライバシー・セキュリティ</h4>
+          <p class="text-xs text-gray-600"><b>Tesseract.js v5</b> による完全クライアントサイドOCRです。APIキー不要、<b>外部サーバへの送信一切なし</b>。児童の手書き答案や個人情報を含む画像も安心して使えます。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ：教材取込（v1.8.0） ===== -->
+      <div class="help-tab-content hidden" data-tab="import">
+        <div class="help-section bg-gradient-to-r from-amber-50 to-yellow-50 border-l-4 border-amber-400 rounded-r">
+          <h4><i class="fa-solid fa-file-import text-amber-500"></i> 📄 PDF・画像をボード背景に（v1.8.0）</h4>
+          <p>左ツールバーの <b>📥取込ボタン</b> から、手元のPDFワークシートや取材画像を <b>ページ背景として負い込み</b>、その上にそのまま書き込み・付箋・コメントを乗せられます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-regular fa-file-pdf text-amber-500"></i> PDF取り込み</h4>
+          <ul class="ml-4 list-disc text-xs text-gray-600 space-y-1">
+            <li>ドラッグ＆ドロップゾーンまたはファイル選択</li>
+            <li>複数ページPDFは自動で <b>ページごとに分割</b> → 現在のボードに連続ページとして追加</li>
+            <li>「<b>1ページだけ</b>」オプションで現在ページの背景にのみ適用も可</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-regular fa-image text-amber-500"></i> 画像取り込み</h4>
+          <p>JPEG・PNG・WebPをボード背景に。スマホで撮った黒板の写真や、教科書スキャンをそのまま教材化できます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-sliders text-amber-500"></i> 背景のフィット・透明度調整</h4>
+          <ul class="ml-4 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>フィット</b>：<code>contain</code>（ページに収める）/ <code>cover</code>（全面に裁ち落とし）/ <code>stretch</code>（引き伸ばし）</li>
+            <li><b>透明度</b>：0～100%で背景を薄くして書き込みを見やすく</li>
+            <li>ページ一覧の「背景を削除」でいつでも外せる</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-lightbulb text-amber-500"></i> よくある使い方</h4>
+          <p class="text-xs text-gray-600">
+            ・去年の「<b>ワークシートPDF</b>」に今年のクラスで書き込み<br/>
+            ・<b>教科書の挫絵</b>を背景にして、考えを付箋で貼り付ける<br/>
+            ・「<b>テスト闇出項スキャン</b>」を背景として、クラスで一緒に解く
+          </p>
+        </div>
+      </div>
+
+      <!-- ===== タブ：教材テンプレート（v1.7.0） ===== -->
+      <div class="help-tab-content hidden" data-tab="template">
+        <div class="help-section bg-gradient-to-r from-purple-50 to-fuchsia-50 border-l-4 border-purple-400 rounded-r">
+          <h4><i class="fa-solid fa-graduation-cap text-purple-500"></i> 📚 15種の授業テンプレート（v1.7.0）</h4>
+          <p>左ツールバーの <b>🎓テンプレートボタン</b> からギャラリーを開き、選んだテンプレートをクリックでボードに貼り付け、そのまま授業を始められます。SVGプレビュー付き。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-shapes text-purple-500"></i> テンプレート一覧</h4>
+          <ul class="ml-4 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>話し合い・考える</b>：ベン図 / Yチャート / Tチャート / 5W1Hシート / KWLシート</li>
+            <li><b>振り返り</b>：KPT（Keep/Problem/Try） / 5つ星ルーブリック / 今日の振り返り</li>
+            <li><b>教科別</b>：クラス会議シート / 物語の起承転結 / 観察記録 / 学習メモ / テスト計画表 / 他</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass text-purple-500"></i> 検索・カテゴリフィルタ</h4>
+          <p>ギャラリー上部の検索ボックスやカテゴリチップでしぼり込み。「何をやろうか迷ったら」ギャラリーを見るとインスピレーションをもらえます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-pen-ruler text-purple-500"></i> 貼り付け後は自由に編集</h4>
+          <p>テンプレートは「そのままのコピー」としてボードに乗り、位置・色・文字をそのまま編集できます。クラスや学年に合わせてカスタマイズしてから使いましょう。</p>
+        </div>
+      </div>
+
+      <!-- ===== タブ：PWAオフライン（v1.6.0） ===== -->
+      <div class="help-tab-content hidden" data-tab="pwa">
+        <div class="help-section bg-gradient-to-r from-emerald-50 to-green-50 border-l-4 border-emerald-400 rounded-r">
+          <h4><i class="fa-solid fa-mobile-screen text-emerald-500"></i> 📱 アプリとしてインストール（v1.6.0）</h4>
+          <p>「みんなのジャム」は<b>PWA</b>なので、オドリジナルOSのアプリと同じようにインストールできます。インストール後は<b>全画面</b>、ホーム画面アイコン、オフライン動作が可能になります。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-brands fa-chrome text-emerald-500"></i> デスクトップ（Chrome / Edge）</h4>
+          <p>アドレスバー右端に <b>「インストール」アイコン（⊕型）</b> が出るのでクリックして追加。もしくは、スタート画面下部の「<b>アプリとしてインストール</b>」ボタンからも可。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-brands fa-apple text-emerald-500"></i> iPad / iPhone（Safari）</h4>
+          <p>共有ボタン <i class="fa-solid fa-arrow-up-from-bracket"></i> → 「<b>ホーム画面に追加</b>」。インストールされるとドックから起動でき、アドレスバーも消えて画面が広く使えます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-cloud-arrow-down text-emerald-500"></i> オフライン動作</h4>
+          <p>一度オンラインで起動したら、<b>Service Worker</b>が必要ファイル（HTML/CSS/JS/アイコン/Konva・jsPDF等CDN）をキャッシュ。以降は<b>オフラインでも起動・描画・保存</b>ができます。P2P同期はオンライン必須、オフライン中の修正は再接続時に安全にマージされます。</p>
+        </div>
+
+        <div class="help-section">
+          <h4><i class="fa-solid fa-rotate text-emerald-500"></i> 自動アップデート通知</h4>
+          <p>新しいバージョンが公開されると<b>画面下にスライドインバナー</b>が出て「更新しますか？」と詳しく听いてくれます。作業中を遮らず、よいタイミングでクリックできます。</p>
+        </div>
+      </div>
+
+      <!-- ===== 旧タブ6: 整理・引継ぎ ===== -->
+      <div class="help-tab-content hidden" data-tab="organize">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-tags text-orange-400"></i> 教科・学年・フォルダ・タグ（v1.5.0）</h4>
+          <p>ボード一覧から各ボードの「<b>🏷️編集</b>」ボタンで<b>整理情報</b>を設定できます：</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>教科</b>：国語・算数・理科・社会・英語・音楽・図工・体育・その他（カラー付きタグ）</li>
+            <li><b>学年・クラス</b>：「3年A組」「中2-4」など</li>
+            <li><b>フォルダ</b>：「2学期」「公開授業」など自由記入</li>
+            <li><b>タグ</b>：「単元1」「ふりかえり」などカンマ区切りで複数</li>
+            <li><b>⭐お気に入り</b>：よく使うボードに目印</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass text-orange-400"></i> 検索・フィルタ</h4>
+          <p>ボード一覧の<b>検索ボックス</b>はタイトル・タグ・教科・学年・フォルダを<b>横断検索</b>。教科・学年・フォルダのドロップダウン、お気に入りチェックを<b>同時に</b>使った絞込もできます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-chalkboard-user text-orange-400"></i> 先生用ダッシュボード（v1.5.0）</h4>
+          <p>ヘッダーの「<b>👩‍🏫ダッシュボード</b>」ボタンで全ボードを横断管理：</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>統計</b>：ボード数・合計ページ・オブジェクト・コメント</li>
+            <li><b>複数選択</b>＋一括<b>フォルダ設定</b>・<b>教科設定</b>・<b>JSONエクスポート</b>・<b>削除</b></li>
+            <li><b>全データバックアップ</b>：全ボードを1つのJSONに（学年末・端末交換時の引継ぎに）</li>
+            <li><b>復元</b>：バックアップJSONからクリックで一括復元</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-lightbulb text-orange-400"></i> 活用シーン例</h4>
+          <p class="text-xs text-gray-600">
+            ・<b>学年末</b>：「全データバックアップ」→USBに保存→来年の引継ぎへ<br/>
+            ・<b>教科担任の引継ぎ</b>：「教科：算数」でフィルタ→一括エクスポート<br/>
+            ・<b>公開授業</b>：タグ「公開授業」を付けて、指導案と一緒に共有<br/>
+            ・<b>単元ごと整理</b>：フォルダ「2学期」「3学期」で時系列管理
+          </p>
+        </div>
+      </div>
+
+      <!-- ===== タブ7: GIGA端末 ===== -->
+      <div class="help-tab-content hidden" data-tab="giga">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-tablet-screen-button text-orange-400"></i> タッチ・ペン操作（v1.5.0）</h4>
+          <p>iPad・Chromebook・Androidタブレットを<b>自動検出</b>。指で直接描けます。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li><b>1本指</b>：選んでいるツールで描画・操作</li>
+            <li><b>2本指ピンチ</b>：拡大・縮小（中心点を維持）</li>
+            <li><b>2本指ドラッグ</b>：画面のパン（移動）</li>
+            <li><b>ペン優先</b>：スタイラスペン使用時、500ms以内のタッチは無視（手のひら誤接触対策）</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-hand text-orange-400"></i> 手のひら誤接触ブロック</h4>
+          <p>ヘッダーの<b>✋ボタン</b>（タッチ端末で表示）でON/OFF。スタイラスペンで書いている時の手のひら接触を無視します。デフォルトはON。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass-plus text-orange-400"></i> UIサイズ拡大モード</h4>
+          <p>ヘッダーの「<b>🔍+</b>」ボタンでUIを<b>一段階大きく</b>します。低学年・低学力児・視覚補助が必要な児童・小型タブレット利用時に便利。設定はブラウザに保存されます。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-bolt text-orange-400"></i> Chromebook最適化</h4>
+          <p>CrOS（Chromebook）を検出すると<b>描画レイテンシを下げる</b>処理を自動適用。低スペック端末でもスムーズに動作します。</p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-circle-info text-orange-400"></i> 児童に配るときのコツ</h4>
+          <p class="text-xs text-gray-600">
+            ・QR配布シート（A4印刷）を全員に配ると参加が一気に楽になります<br/>
+            ・ブラウザは<b>Chrome / Edge</b>推奨。Safariも動作しますがPeerJSの相性で接続が不安定な場合あり<br/>
+            ・端末ごとに<b>ニックネーム設定</b>を済ませておくと誰の書き込みか分かりやすい
+          </p>
+        </div>
+      </div>
+
+      <!-- ===== タブ: ショートカット ===== -->
+      <div class="help-tab-content hidden" data-tab="shortcut">
+        <div class="help-section">
+          <h4><i class="fa-solid fa-pen-to-square text-orange-400"></i> ツール切替</h4>
+          <p>
+            <span class="kbd">V</span>選択 /
+            <span class="kbd">P</span>ペン /
+            <span class="kbd">M</span>蛍光ペン /
+            <span class="kbd">E</span>消しゴム /
+            <span class="kbd">S</span>付箋 /
+            <span class="kbd">T</span>テキスト
+          </p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-rotate text-orange-400"></i> 編集</h4>
+          <p>
+            <span class="kbd">Ctrl+Z</span>元に戻す /
+            <span class="kbd">Ctrl+Shift+Z</span>やり直し /
+            <span class="kbd">Ctrl+Y</span>やり直し<br/>
+            <span class="kbd">Ctrl+D</span>選択を複製 /
+            <span class="kbd">Ctrl+S</span>保存・エクスポートを開く<br/>
+            <span class="kbd">Del</span> または <span class="kbd">Backspace</span>選択を削除 /
+            <span class="kbd">Esc</span>選択解除・モーダルを閉じる
+          </p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-magnifying-glass text-orange-400"></i> 表示・移動</h4>
+          <p>
+            <span class="kbd">Ctrl+ホイール</span>ズーム /
+            <span class="kbd">ホイール</span>パン<br/>
+            タッチ端末は<b>2本指ピンチ</b>でズーム、<b>2本指ドラッグ</b>でパン
+          </p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-mouse-pointer text-orange-400"></i> マウス操作</h4>
+          <p>
+            <b>クリック</b>選択 / <b>Shift+クリック</b>追加選択 / <b>ダブルクリック</b>編集モード<br/>
+            <b>右クリック</b>コンテキストメニュー（最前面・最背面・複製・ロック・削除）<br/>
+            <b>ドラッグ</b>移動・範囲選択
+          </p>
+        </div>
+        <div class="help-section">
+          <h4><i class="fa-solid fa-image text-orange-400"></i> 画像挿入</h4>
+          <p>
+            <b>ドラッグ＆ドロップ</b>でファイル直接貼り付け<br/>
+            <span class="kbd">Ctrl+V</span>でクリップボード画像を貼り付け<br/>
+            画像ツールから<b>クリック挿入</b>も可
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====== コンテキストメニュー ====== -->
+<div id="context-menu" class="hidden absolute bg-white rounded-lg shadow-xl border border-orange-100 py-1 z-50 text-sm min-w-[160px]">
+  <button class="ctx-item" data-ctx="front"><i class="fa-solid fa-arrow-up w-4"></i>最前面へ</button>
+  <button class="ctx-item" data-ctx="back"><i class="fa-solid fa-arrow-down w-4"></i>最背面へ</button>
+  <button class="ctx-item" data-ctx="duplicate"><i class="fa-regular fa-clone w-4"></i>複製</button>
+  <button class="ctx-item teacher-only" data-ctx="lock"><i class="fa-solid fa-lock w-4"></i>ロック切替</button>
+  <div class="border-t border-orange-100 my-1"></div>
+  <button class="ctx-item text-red-500" data-ctx="delete"><i class="fa-regular fa-trash-can w-4"></i>削除</button>
+</div>
+
+<!-- ====== モーダル：スタート画面（新規作成・最近のボード） ====== -->
+<div id="modal-start" class="modal-backdrop hidden">
+  <div class="modal-panel max-w-xl">
+    <div class="text-center mb-5">
+      <div class="logo-badge mx-auto mb-3" style="width:56px;height:56px;font-size:24px;">
+        <i class="fa-solid fa-palette"></i>
+      </div>
+      <h2 class="text-xl font-extrabold text-gray-800">みんなのジャムへようこそ</h2>
+      <p class="text-xs text-gray-500 mt-1">どのボードを開きますか？</p>
+    </div>
+
+    <!-- 新しいボードを作る -->
+    <button id="btn-create-new" class="w-full mb-4 p-4 rounded-xl bg-gradient-to-r from-orange-400 via-pink-400 to-purple-400 text-white font-extrabold text-base shadow-md hover:shadow-lg transition flex items-center justify-center gap-2">
+      <i class="fa-solid fa-file-circle-plus text-xl"></i>
+      新しいボードを作る
+    </button>
+
+    <!-- 招待リンクから参加 -->
+    <div class="bg-purple-50 rounded-xl p-3 mb-4">
+      <div class="text-[11px] font-bold text-purple-600 mb-2"><i class="fa-solid fa-link mr-1"></i>招待リンクから参加する</div>
+      <div class="flex items-center gap-2">
+        <input id="join-url" type="text" placeholder="招待URLをここに貼り付け" class="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-200 font-mono" />
+        <button id="btn-join" class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold rounded-lg transition whitespace-nowrap">
+          参加する
+        </button>
+      </div>
+    </div>
+
+    <!-- 最近のボード -->
+    <div class="bg-orange-50 rounded-xl p-3">
+      <div class="text-[11px] font-bold text-orange-600 mb-2 flex items-center justify-between">
+        <span><i class="fa-solid fa-clock-rotate-left mr-1"></i>最近のボード</span>
+        <span id="recent-count" class="text-gray-500 font-normal"></span>
+      </div>
+      <div id="recent-boards" class="space-y-1.5 max-h-64 overflow-y-auto">
+        <!-- JSで動的生成 -->
+      </div>
+      <div id="recent-empty" class="text-center text-xs text-gray-400 py-6 hidden">
+        <i class="fa-regular fa-folder-open text-3xl text-orange-200 mb-2 block"></i>
+        まだボードがありません
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：ボード一覧（既存編集中から開く用・閉じるボタン付き） ====== -->
+<div id="modal-board-list" class="modal-backdrop hidden">
+  <div class="modal-panel max-w-xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-folder-open text-orange-400 mr-2"></i>ボードを開く</h3>
+      <button class="modal-close" data-close="modal-board-list"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <button id="btn-create-new-2" class="w-full mb-4 p-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-400 text-white font-extrabold text-sm shadow hover:shadow-md transition flex items-center justify-center gap-2">
+      <i class="fa-solid fa-file-circle-plus"></i>
+      新しいボードを作る
+    </button>
+
+    <div class="bg-orange-50 rounded-xl p-3">
+      <div class="text-[11px] font-bold text-orange-600 mb-2"><i class="fa-solid fa-clock-rotate-left mr-1"></i>最近のボード</div>
+      <div id="recent-boards-2" class="space-y-1.5 max-h-72 overflow-y-auto"></div>
+      <div id="recent-empty-2" class="text-center text-xs text-gray-400 py-6 hidden">
+        まだボードがありません
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== モーダル：コメント詳細 ====== -->
+<div id="modal-comment" class="modal-backdrop hidden">
+  <div class="modal-panel max-w-md">
+    <div class="flex items-start justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <span id="comment-detail-color" class="w-7 h-7 rounded-full border-2 border-white shadow flex-shrink-0"></span>
+        <div>
+          <div id="comment-detail-author" class="font-bold text-gray-800 text-sm">-</div>
+          <div id="comment-detail-date" class="text-[10px] text-gray-400">-</div>
+        </div>
+      </div>
+      <button class="modal-close" data-close="modal-comment"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="comment-detail-text" class="text-sm text-gray-700 bg-orange-50 rounded-lg p-3 mb-3 whitespace-pre-wrap break-words"></div>
+
+    <!-- スレッド -->
+    <div id="comment-detail-replies" class="space-y-2 mb-3 max-h-48 overflow-y-auto"></div>
+
+    <!-- 返信フォーム -->
+    <form id="comment-reply-form" class="flex items-center gap-2 mb-3">
+      <input id="comment-reply-input" type="text" placeholder="返信を書く…" maxlength="200" class="flex-1 bg-white border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200" />
+      <button type="submit" class="px-3 py-2 bg-orange-400 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+    </form>
+
+    <div class="flex items-center justify-between gap-2 pt-2 border-t border-orange-100">
+      <button id="comment-resolve" class="px-3 py-2 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-bold rounded-lg transition">
+        <i class="fa-solid fa-check mr-1"></i>解決にする
+      </button>
+      <button id="comment-delete" class="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 text-xs font-bold rounded-lg transition">
+        <i class="fa-regular fa-trash-can mr-1"></i>削除
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 変更履歴パネル ====== -->
+<div id="history-panel" class="history-panel hidden">
+  <div class="history-header">
+    <i class="fa-solid fa-clock-rotate-left text-orange-400"></i>
+    <span class="font-bold text-sm">変更履歴</span>
+    <button id="history-close" class="ml-auto text-gray-400 hover:text-gray-700" title="閉じる">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div class="history-tip">
+    各ステップの「戻す」ボタンで、その時点の状態に復元できます。
+  </div>
+  <div id="history-list" class="history-list"></div>
+</div>
+
+<!-- ====== トースト ====== -->
+<div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm z-50"></div>
+
+<!-- 画像アップロード用（非表示） -->
+<input type="file" id="image-upload" accept="image/*" class="hidden" />
+
+<!-- スクリプト（v=1.10.0でキャッシュバスト） -->
+<script src="js/state.js?v=1.10.0"></script>
+<script src="js/tools.js?v=1.10.0"></script>
+<script src="js/board.js?v=1.10.0"></script>
+<script src="js/pages.js?v=1.10.0"></script>
+<script src="js/sync.js?v=1.10.0"></script>
+<script src="js/p2p.js?v=1.10.0"></script>
+<script src="js/export.js?v=1.10.0"></script>
+<script src="js/qr.js?v=1.10.0"></script>
+<script src="js/timer.js?v=1.10.0"></script>
+<script src="js/lock.js?v=1.10.0"></script>
+<script src="js/collab.js?v=1.10.0"></script>
+<script src="js/giga.js?v=1.10.0"></script>
+<script src="js/organize.js?v=1.10.0"></script>
+<script src="js/dashboard.js?v=1.10.0"></script>
+<script src="js/templates.js?v=1.10.0"></script>
+<script src="js/import.js?v=1.10.0"></script>
+<script src="js/ocr.js?v=1.10.0"></script>
+<script src="js/poll.js?v=1.10.0"></script>
+<script src="js/app.js?v=1.10.0"></script>
+</body>
+</html>

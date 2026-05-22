@@ -1,0 +1,56 @@
+{
+  "name": "みんなのジャム - みんなのホワイトボード",
+  "short_name": "みんなのジャム",
+  "description": "小学校の先生のためのシンプルな共同ホワイトボード。Google Jamboardの代替として、付箋・図形・手書き・タイマー・共同編集が無料で使えます。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fffaf5",
+  "theme_color": "#ff9a8b",
+  "lang": "ja",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "新しいボードを作る",
+      "short_name": "新規ボード",
+      "description": "白紙のボードをすぐ開きます",
+      "url": "./index.html?action=new",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "ボード一覧を見る",
+      "short_name": "ボード一覧",
+      "description": "最近のボードを開きます",
+      "url": "./index.html?action=list",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
