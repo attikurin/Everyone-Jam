@@ -46,7 +46,7 @@
 <!-- Google Fonts -->
 <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet" />
 
-<link rel="stylesheet" href="css/style.css?v=1.10.0" />
+<link rel="stylesheet" href="css/style.css?v=1.10.1" />
 </head>
 <body class="overflow-hidden select-none">
 
@@ -720,7 +720,7 @@
 <div id="modal-help" class="modal-backdrop hidden">
   <div class="modal-panel max-w-3xl">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-circle-question text-orange-400 mr-2"></i>みんなのジャムの使い方 <span class="text-xs text-gray-400 font-normal">v1.10.0</span></h3>
+      <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-circle-question text-orange-400 mr-2"></i>みんなのジャムの使い方 <span class="text-xs text-gray-400 font-normal">v1.10.1</span></h3>
       <button class="modal-close" data-close="modal-help"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
@@ -902,6 +902,17 @@
         <div class="help-section">
           <h4><i class="fa-solid fa-user-pen text-orange-400"></i> ニックネーム・色設定</h4>
           <p>共有ダイアログから<b>表示名と色</b>を変更できます。例：「3年A組 さくらい先生」「たろう（はん長）」。最大5名分のアバターがヘッダーに並びます。</p>
+          <p class="mt-1 text-xs text-gray-500">💡 ヘッダーの<b>「接続状態バッジ」</b>をクリックすれば、いつでも名前・色を変更できます。</p>
+        </div>
+        <div class="help-section" style="background: linear-gradient(135deg, #fff5f0, #fffaf5); border-left: 4px solid #ff9a8b;">
+          <h4><i class="fa-solid fa-shield-halved text-orange-400"></i> 共用端末での「同じ名前になる問題」を防ぐ（v1.10.1）</h4>
+          <p><b>ボードに参加するとき、必ず名前入力ダイアログが出ます。</b>前に使った子の名前が残っていても、その場で書き換えられます。</p>
+          <ul class="ml-4 mt-1 list-disc text-xs text-gray-600 space-y-1">
+            <li>それでも同じ名前で参加された場合は、<b>自動的に「うさぎの先生(2)」のように連番</b>が付きます</li>
+            <li>本人にも「名前を変更しました」とお知らせが表示されます</li>
+            <li>参加後もヘッダーの<b>接続状態バッジ</b>をクリックすれば名前を変えられます</li>
+          </ul>
+          <p class="mt-1 text-xs text-gray-500">※ 区や学校の共有Chromebookをお使いの先生は、この機能で誰が誰か分からなくなる問題を防げます。</p>
         </div>
       </div>
 
@@ -1391,25 +1402,25 @@
 <!-- 画像アップロード用（非表示） -->
 <input type="file" id="image-upload" accept="image/*" class="hidden" />
 
-<!-- スクリプト（v=1.10.0でキャッシュバスト） -->
-<script src="js/state.js?v=1.10.0"></script>
-<script src="js/tools.js?v=1.10.0"></script>
-<script src="js/board.js?v=1.10.0"></script>
-<script src="js/pages.js?v=1.10.0"></script>
-<script src="js/sync.js?v=1.10.0"></script>
-<script src="js/p2p.js?v=1.10.0"></script>
-<script src="js/export.js?v=1.10.0"></script>
-<script src="js/qr.js?v=1.10.0"></script>
-<script src="js/timer.js?v=1.10.0"></script>
-<script src="js/lock.js?v=1.10.0"></script>
-<script src="js/collab.js?v=1.10.0"></script>
-<script src="js/giga.js?v=1.10.0"></script>
-<script src="js/organize.js?v=1.10.0"></script>
-<script src="js/dashboard.js?v=1.10.0"></script>
-<script src="js/templates.js?v=1.10.0"></script>
-<script src="js/import.js?v=1.10.0"></script>
-<script src="js/ocr.js?v=1.10.0"></script>
-<script src="js/poll.js?v=1.10.0"></script>
-<script src="js/app.js?v=1.10.0"></script>
+<!-- スクリプト（v=1.10.1でキャッシュバスト） -->
+<script src="js/state.js?v=1.10.1"></script>
+<script src="js/tools.js?v=1.10.1"></script>
+<script src="js/board.js?v=1.10.1"></script>
+<script src="js/pages.js?v=1.10.1"></script>
+<script src="js/sync.js?v=1.10.1"></script>
+<script src="js/p2p.js?v=1.10.1"></script>
+<script src="js/export.js?v=1.10.1"></script>
+<script src="js/qr.js?v=1.10.1"></script>
+<script src="js/timer.js?v=1.10.1"></script>
+<script src="js/lock.js?v=1.10.1"></script>
+<script src="js/collab.js?v=1.10.1"></script>
+<script src="js/giga.js?v=1.10.1"></script>
+<script src="js/organize.js?v=1.10.1"></script>
+<script src="js/dashboard.js?v=1.10.1"></script>
+<script src="js/templates.js?v=1.10.1"></script>
+<script src="js/import.js?v=1.10.1"></script>
+<script src="js/ocr.js?v=1.10.1"></script>
+<script src="js/poll.js?v=1.10.1"></script>
+<script src="js/app.js?v=1.10.1"></script>
 </body>
 </html>

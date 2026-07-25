@@ -133,7 +133,7 @@ let _appInitialized = false;
 function init() {
   try {
     // 起動診断ログ（Publish環境で問題があったときの確認用）
-    console.log('[みんなのジャム v1.10.0] 起動診断:');
+    console.log('[みんなのジャム v1.10.1] 起動診断:');
     console.log('  現在のURL:', window.location.href);
     console.log('  search:', window.location.search);
     console.log('  pathname:', window.location.pathname);

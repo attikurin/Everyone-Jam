@@ -53,12 +53,136 @@ function loadOrCreateIdentity() {
   P2P.me.name = myName;
 }
 
+// ★ 追加：URLに ?board= がある = ゲスト参加時に、必ず名前入力を求める
+//   （共有端末で前の子の名前が残るのを防ぐ）
+function isJoiningSharedBoard() {
+  try {
+    const u = new URL(window.location.href);
+    return !!u.searchParams.get('board');
+  } catch (_) { return false; }
+}
+
+function promptNameIfNeeded() {
+  return new Promise((resolve) => {
+    // 既に名前入力済みで、同じセッション中なら再入力不要
+    const sessionAsked = sessionStorage.getItem('minnanojam_name_asked') === '1';
+    if (sessionAsked && !isJoiningSharedBoard()) {
+      resolve();
+      return;
+    }
+    // ゲスト参加時、または初回起動時は必ずダイアログを出す
+    showNameEntryDialog(() => {
+      sessionStorage.setItem('minnanojam_name_asked', '1');
+      resolve();
+    });
+  });
+}
+
+function showNameEntryDialog(onDone) {
+  // 既存のダイアログがあれば削除
+  const old = document.getElementById('name-entry-modal');
+  if (old) old.remove();
+
+  const currentName = localStorage.getItem('minnanojam_my_name') || '';
+  const currentColor = localStorage.getItem('minnanojam_my_color') || PRESENCE_COLORS[0];
+  const isJoin = isJoiningSharedBoard();
+
+  const modal = document.createElement('div');
+  modal.id = 'name-entry-modal';
+  modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4';
+  modal.innerHTML = [
+    '<div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" style="font-family: \'Kosugi Maru\', sans-serif;">',
+      '<h2 class="text-xl font-bold mb-2" style="color:#ff6f61;">' + (isJoin ? '👋 ボードに参加' : '✏️ お名前を入力') + '</h2>',
+      '<p class="text-sm text-gray-600 mb-4">' + (isJoin
+        ? 'このボードは共有されています。<br>あなたのお名前を入力してください。'
+        : '共同編集で表示される、あなたのお名前を入力してください。') + '</p>',
+      '<label class="block text-sm font-semibold text-gray-700 mb-1">お名前</label>',
+      '<input id="name-entry-input" type="text" maxlength="20" class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none mb-3" placeholder="例：たなか / 5-1 やまだ" value="' + escapeHtml(currentName) + '">',
+      '<label class="block text-sm font-semibold text-gray-700 mb-1">色</label>',
+      '<div id="name-entry-colors" class="flex gap-2 mb-4 flex-wrap"></div>',
+      '<div class="flex gap-2 justify-end">',
+        '<button id="name-entry-ok" class="px-5 py-2 rounded-lg font-bold text-white shadow" style="background:#ff9a8b;">この名前で入る</button>',
+      '</div>',
+      '<p class="text-xs text-gray-400 mt-3">※ 共用端末を使うときは、必ず自分の名前に書き換えてください</p>',
+    '</div>',
+  ].join('');
+  document.body.appendChild(modal);
+
+  // 色スウォッチ
+  const colorsWrap = modal.querySelector('#name-entry-colors');
+  let selectedColor = currentColor;
+  PRESENCE_COLORS.forEach((c) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'w-8 h-8 rounded-full border-2 transition';
+    b.style.background = c;
+    b.style.borderColor = (c === selectedColor) ? '#333' : 'transparent';
+    b.addEventListener('click', () => {
+      selectedColor = c;
+      colorsWrap.querySelectorAll('button').forEach((el) => { el.style.borderColor = 'transparent'; });
+      b.style.borderColor = '#333';
+    });
+    colorsWrap.appendChild(b);
+  });
+
+  const input = modal.querySelector('#name-entry-input');
+  const okBtn = modal.querySelector('#name-entry-ok');
+
+  // 全選択して置き換えやすくする（共用端末対策）
+  setTimeout(() => { input.focus(); input.select(); }, 100);
+
+  const submit = () => {
+    let name = (input.value || '').trim();
+    if (!name) {
+      // 空欄なら動物名にフォールバック
+      name = ANIMAL_NAMES[Math.floor(Math.random() * ANIMAL_NAMES.length)] + 'の先生';
+    }
+    // 20文字制限
+    name = name.slice(0, 20);
+    localStorage.setItem('minnanojam_my_name', name);
+    localStorage.setItem('minnanojam_my_color', selectedColor);
+    P2P.me.name = name;
+    P2P.me.color = selectedColor;
+    modal.remove();
+    if (typeof onDone === 'function') onDone();
+  };
+
+  okBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+  });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function makeHostPeerId(boardId) {
   const cleaned = String(boardId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
   return 'mnj-host-' + cleaned;
 }
+
+// ★ 強化：crypto.randomUUID() を優先、無ければ複数のエントロピー源を混ぜて衝突をほぼゼロに
 function makeClientPeerId() {
-  return 'mnj-c-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  let rand;
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      rand = window.crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+    } else if (window.crypto && window.crypto.getRandomValues) {
+      const arr = new Uint8Array(8);
+      window.crypto.getRandomValues(arr);
+      rand = Array.from(arr, (b) => b.toString(36)).join('').slice(0, 12);
+    } else {
+      rand = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+    }
+  } catch (_) {
+    rand = Math.random().toString(36).slice(2, 10);
+  }
+  const t = Date.now().toString(36).slice(-4);
+  const perf = Math.floor((performance.now ? performance.now() : 0) * 1000).toString(36).slice(-3);
+  return 'mnj-c-' + rand + '-' + t + perf;
 }
 
 // ====== 初期化 ======
@@ -72,7 +196,10 @@ function initP2P() {
   setupShareUI();
   setupCursorLayer();
   setSyncState('connecting', '接続中…');
-  tryBecomeHost();
+  // ★ 名前入力（ゲスト参加時は必ず、そうでなくても初回は表示）
+  promptNameIfNeeded().then(() => {
+    tryBecomeHost();
+  });
 }
 
 function tryBecomeHost() {
@@ -193,12 +320,44 @@ function setupClientConnection(conn) {
   conn.on('error', (err) => console.warn('クライアント接続エラー:', err));
 }
 
+// ★ 追加：ホスト側で名前重複を検知し、後から入った人に (2), (3)... を付ける
+function resolveDuplicateName(requestedName) {
+  const base = (requestedName || 'ゲスト').trim() || 'ゲスト';
+  // 既存の名前一覧を集める
+  const existingNames = new Set();
+  P2P.peers.forEach((p) => {
+    if (p && p.name) existingNames.add(p.name);
+  });
+  if (!existingNames.has(base)) return base;
+  // (2), (3)... と順に試す
+  for (let i = 2; i <= 99; i++) {
+    const candidate = base + '(' + i + ')';
+    if (!existingNames.has(candidate)) return candidate;
+  }
+  return base + '(?)';
+}
+
 function handleIncomingConnection(conn) {
   conn.on('open', () => {
     P2P.connections.set(conn.peer, conn);
     const meta = conn.metadata || {};
+    // ★ 名前重複チェック（ホストのときのみ有効に働く）
+    let displayName = meta.name || '名無しさん';
+    if (P2P.isHost) {
+      const resolved = resolveDuplicateName(displayName);
+      if (resolved !== displayName) {
+        console.log('[名前重複] ' + displayName + ' → ' + resolved + ' に自動リネーム');
+        displayName = resolved;
+        // 本人にも新しい名前を通知
+        safeSend(conn, {
+          type: 'name-assigned',
+          from: P2P.myId,
+          assignedName: displayName,
+        });
+      }
+    }
     addPresence(conn.peer, {
-      name: meta.name || '名無しさん',
+      name: displayName,
       color: meta.color || '#888',
       joinedAt: Date.now(),
     });
@@ -215,10 +374,10 @@ function handleIncomingConnection(conn) {
       relayToOthers(conn.peer, {
         type: 'peer-joined',
         peerId: conn.peer,
-        name: meta.name,
+        name: displayName,
         color: meta.color,
       });
-      showToast('👋 ' + (meta.name || 'ゲスト') + ' さんが参加しました');
+      showToast('👋 ' + displayName + ' さんが参加しました');
     }
     updateConnectionUI();
   });
@@ -311,6 +470,18 @@ function onMessageFromHost(msg) {
     case 'presence':
       updatePresence(msg.from, { name: msg.name, color: msg.color });
       updateConnectionUI();
+      break;
+    case 'name-assigned':
+      // ★ ホストから「同じ名前があったのでリネームしました」と通知が来た
+      if (msg.assignedName && msg.assignedName !== P2P.me.name) {
+        const oldName = P2P.me.name;
+        P2P.me.name = msg.assignedName;
+        // 自分の presence も更新
+        if (P2P.myId) updatePresence(P2P.myId, { name: msg.assignedName });
+        updateConnectionUI();
+        showToast('ℹ️ 同じ名前の方がいたので「' + msg.assignedName + '」に変更しました');
+        console.log('[名前変更] ' + oldName + ' → ' + msg.assignedName);
+      }
       break;
   }
 }
@@ -560,6 +731,38 @@ function setupShareUI() {
 
   if (myColorChip) myColorChip.style.background = P2P.me.color;
   if (myNameInput) myNameInput.value = P2P.me.name;
+
+  // ★ 追加：sync-indicator（接続状態バッジ）をクリックで名前変更ダイアログを開く
+  const syncIndicator = document.getElementById('sync-indicator');
+  if (syncIndicator) {
+    syncIndicator.style.cursor = 'pointer';
+    syncIndicator.title = 'クリックして名前を変更';
+    syncIndicator.addEventListener('click', () => {
+      showNameEntryDialog(() => {
+        // 名前変更後、他の参加者にも通知
+        if (P2P.ready && P2P.myId) {
+          const presenceMsg = {
+            type: 'presence',
+            from: P2P.myId,
+            name: P2P.me.name,
+            color: P2P.me.color,
+          };
+          if (P2P.isHost) {
+            relayToOthers(null, presenceMsg);
+          } else if (P2P.hostConn) {
+            safeSend(P2P.hostConn, presenceMsg);
+          }
+          updatePresence(P2P.myId, { name: P2P.me.name, color: P2P.me.color });
+          updateConnectionUI();
+          // 共有モーダル内の入力欄も同期
+          const mn = document.getElementById('my-name');
+          if (mn) mn.value = P2P.me.name;
+          const mc = document.getElementById('my-color-chip');
+          if (mc) mc.style.background = P2P.me.color;
+        }
+      });
+    });
+  }
 
   if (btnShare && modal && urlInput) {
     btnShare.addEventListener('click', () => {
